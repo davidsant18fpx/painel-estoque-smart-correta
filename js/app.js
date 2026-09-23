@@ -225,7 +225,9 @@ function render() {
   const risco = filtrados
     .filter((i) => i.status === "CRITICO" || i.status === "ALERTA")
     .sort((a, b) => (a.status === "CRITICO" ? 0 : 1) - (b.status === "CRITICO" ? 0 : 1) || (a.autonomia ?? 0) - (b.autonomia ?? 0));
-  const ok = filtrados.filter((i) => i.status === "OK" || i.status === "SEM_CONSUMO");
+  const ok = filtrados
+    .filter((i) => i.status === "OK" || i.status === "SEM_CONSUMO")
+    .sort((a, b) => (a.status === "OK" ? 0 : 1) - (b.status === "OK" ? 0 : 1));
 
   els.corpoRisco.innerHTML = risco.map(linhaHtml).join("") ||
     `<tr><td colspan="5" class="tabela-vazia">Nenhum item encontrado.</td></tr>`;
