@@ -99,7 +99,11 @@ function mapearColunas(cols) {
     else if (label.startsWith("MATERIAL")) idx.material = i;
     else if (label.includes("ESTOQUE")) idx.estoque = i;
     else if (label.includes("CONSUMO") && label.includes("MEDIO")) idx.consumoMedio = i;
-    else if (label.includes("CONSUMO") && (label.includes("DIARIO") || label.includes("DIA"))) idx.consumoDiario = i;
+    // OBS: a coluna da planilha se chama "CONSUMO MENSAL", mas os valores nela
+    // já são usados como consumo DIÁRIO na aba PAINEL PRINCIPAL (conferido: os
+    // números batem 1 a 1 com a coluna "Consumo Diário" de lá, sem divisão).
+    // Por isso mapeamos ela direto para consumoDiario, sem dividir por 30.
+    else if (label.includes("CONSUMO") && (label.includes("MENSAL") || label.includes("DIARIO") || label.includes("DIA"))) idx.consumoDiario = i;
   });
 
   const faltando = Object.entries(idx)
@@ -109,7 +113,7 @@ function mapearColunas(cols) {
   if (faltando.length > 0) {
     throw new Error(
       `Não encontrei na aba "${CONFIG.SHEET_NAME}" as colunas: ${faltando.join(", ")}. ` +
-      `Confira se os nomes das colunas na planilha continuam sendo SMART, MATERIAL, QTD ESTOQUE e CONSUMO DIARIO.`
+      `Confira se os nomes das colunas na planilha continuam sendo SMART, MATERIAL, QTD ESTOQUE e CONSUMO MENSAL (usada como consumo diário).`
     );
   }
 
