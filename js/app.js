@@ -35,6 +35,7 @@ function normalizar(txt) {
   return String(txt || "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
     .toUpperCase()
     .trim();
 }
@@ -97,8 +98,8 @@ function mapearColunas(cols) {
     if (label === "SMART") idx.smart = i;
     else if (label.startsWith("MATERIAL")) idx.material = i;
     else if (label.includes("ESTOQUE")) idx.estoque = i;
-    else if (label.includes("CONSUMO MEDIO")) idx.consumoMedio = i;
-    else if (label.includes("CONSUMO DIARIO") || label.includes("CONSUMO DIÁRIO")) idx.consumoDiario = i;
+    else if (label.includes("CONSUMO") && label.includes("MEDIO")) idx.consumoMedio = i;
+    else if (label.includes("CONSUMO") && (label.includes("DIARIO") || label.includes("DIA"))) idx.consumoDiario = i;
   });
 
   const faltando = Object.entries(idx)
