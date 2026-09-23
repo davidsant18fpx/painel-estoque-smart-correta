@@ -30,9 +30,9 @@ body {
 }
 
 .container {
-  max-width: 1280px;
+  max-width: 1760px;
   margin: 0 auto;
-  padding: 20px;
+  padding: 20px 32px;
 }
 
 /* ---------- Cabeçalho ---------- */
@@ -366,7 +366,7 @@ tbody tr:hover {
 .colunas {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 16px;
+  gap: 24px;
 }
 
 @media (max-width: 860px) {
