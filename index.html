@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Painel de Estoque SMART</title>
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+<div class="container">
+
+  <header class="cabecalho">
+    <div>
+      <h1>📦 PAINEL DE ESTOQUE SMART</h1>
+      <div class="subtitulo">Sistema SMART — Monitoramento de Estoque</div>
+    </div>
+    <div class="cabecalho-info">
+      <div id="ultima-atualizacao">Última atualização: —</div>
+      <button id="btn-atualizar">🔄 Atualizar dados</button>
+    </div>
+  </header>
+
+  <div id="loading" class="estado">Carregando dados da planilha...</div>
+
+  <div id="erro" class="erro-caixa escondido">
+    <h3>⚠️ Não foi possível carregar os dados</h3>
+    <div id="erro-msg"></div>
+  </div>
+
+  <div id="conteudo" class="escondido">
+
+    <section class="cards">
+      <div class="card card-critico">
+        <div class="card-titulo">🔴 Itens críticos</div>
+        <div class="card-valor" id="card-critico-valor">0</div>
+      </div>
+      <div class="card card-alerta">
+        <div class="card-titulo">🟠 Itens em alerta</div>
+        <div class="card-valor" id="card-alerta-valor">0</div>
+      </div>
+      <div class="card card-ok">
+        <div class="card-titulo">🟢 Itens OK</div>
+        <div class="card-valor" id="card-ok-valor">0</div>
+      </div>
+      <div class="card card-total">
+        <div class="card-titulo">📦 Total de itens</div>
+        <div class="card-valor" id="card-total-valor">0</div>
+      </div>
+    </section>
+
+    <input id="busca-input" class="busca" type="text" placeholder="🔎 Pesquisar SMART ou descrição..." />
+
+    <section class="colunas">
+      <div>
+        <div class="painel">
+          <div class="painel-titulo titulo-vermelho">🔴 Itens zerados e em risco</div>
+          <table>
+            <thead><tr><th>SMART</th><th>Material / Descrição</th><th>Estoque</th><th>Diário</th><th>Status</th></tr></thead>
+            <tbody id="corpo-risco"></tbody>
+          </table>
+        </div>
+        <div class="acao" id="acao-recomendada"></div>
+      </div>
+      <div class="painel">
+        <div class="painel-titulo titulo-verde">🟢 Itens com estoque regular</div>
+        <table>
+          <thead><tr><th>SMART</th><th>Material / Descrição</th><th>Estoque</th><th>Diário</th><th>Status</th></tr></thead>
+          <tbody id="corpo-ok"></tbody>
+        </table>
+      </div>
+    </section>
+
+  </div>
+
+  <footer class="rodape">
+    <span>Sistema SMART — painel de consulta</span>
+    <span>Dados somente leitura, atualizados a partir do Google Sheets</span>
+  </footer>
+
+</div>
+
+<div id="modal" class="modal-fundo escondido">
+  <div class="modal-caixa">
+    <button id="modal-fechar" aria-label="Fechar">✕</button>
+    <div id="modal-conteudo"></div>
+  </div>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
