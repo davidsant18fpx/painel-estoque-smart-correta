@@ -70,6 +70,13 @@ body {
   white-space: nowrap;
 }
 
+.dev-credito {
+  font-size: 11px;
+  color: #fecaca99;
+  white-space: nowrap;
+  margin-top: 2px;
+}
+
 #btn-atualizar {
   margin-top: 8px;
   background: #ffffff20;
