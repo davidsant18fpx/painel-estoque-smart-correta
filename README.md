@@ -89,17 +89,20 @@ dia:
 
 ```js
 const CONFIG = {
-  GOOGLE_SHEET_ID: "1sE6uC5h53jSlCYqM605FsWz2XCbmmQWeLSD5Z1VAJI4",
-  SHEET_NAME: "DADOS_SMART",
+  ABAS: [
+    { id: "central", nome: "Central", GOOGLE_SHEET_ID: "...", SHEET_NAME: "DADOS_SMART" },
+    { id: "satelite", nome: "Satélite", GOOGLE_SHEET_ID: "...", SHEET_NAME: "DADOS_SMART" },
+  ],
   DIAS_LIMITE_ALERTA: 30,
   AUTO_REFRESH_MINUTOS: 5,
 };
 ```
 
-- `GOOGLE_SHEET_ID`: já está preenchido com o ID da sua planilha atual
-  (o trecho da URL entre `/d/` e `/edit`). Só muda se você trocar de
-  planilha.
-- `SHEET_NAME`: nome da aba de origem dos dados.
+- `ABAS`: cada item vira um botão clicável no topo do painel ("Central",
+  "Satélite"). Hoje as duas apontam para a mesma planilha — quando você
+  enviar a planilha real do estoque Satélite, é só trocar o
+  `GOOGLE_SHEET_ID` (e `SHEET_NAME`, se for diferente) do item
+  `satelite`.
 - `DIAS_LIMITE_ALERTA`: hoje é 30 dias, como você pediu. Pode ajustar.
 - `AUTO_REFRESH_MINUTOS`: de quanto em quanto tempo o painel busca os
   dados sozinho. Coloque `0` para desativar (o botão de atualizar
@@ -205,6 +208,11 @@ estático como este (veja a seção 6).
 
 - Fonte de dados: aba `DADOS_SMART` (a aba `PAINEL PRINCIPAL` não é
   usada, conforme pedido).
+- A coluna `CONSUMO MENSAL` da `DADOS_SMART` tem o nome "errado": na
+  prática, é esse valor que a própria aba `PAINEL PRINCIPAL` já usa
+  como consumo **diário** (os números batem 1 a 1, sem nenhuma divisão
+  por 30). O painel segue essa mesma lógica: usa o valor de
+  `CONSUMO MENSAL` diretamente como consumo diário.
 - Colunas `Status`/`Qtd` que já existem na planilha **não** são usadas
   para classificar os itens, porque estão incompletas e, em alguns
   casos, inconsistentes com a regra de "sem consumo" que você definiu.
