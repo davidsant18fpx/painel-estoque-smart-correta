@@ -42,13 +42,17 @@ function normalizar(txt) {
     .trim();
 }
 
-function parseNumeroCell(cell) {
-  if (!cell) return 0;
+function parseNumeroOuNull(cell) {
+  if (!cell || cell.v == null || cell.v === "") return null;
   if (typeof cell.v === "number") return cell.v;
-  if (cell.v == null) return 0;
   const raw = String(cell.v).replace(/\./g, "").replace(",", ".");
   const n = parseFloat(raw);
-  return isNaN(n) ? 0 : n;
+  return isNaN(n) ? null : n;
+}
+
+function parseNumeroCell(cell) {
+  const n = parseNumeroOuNull(cell);
+  return n === null ? 0 : n;
 }
 
 function parseTextoCell(cell) {
@@ -57,19 +61,21 @@ function parseTextoCell(cell) {
 }
 
 // ---------- Busca os dados no Google Sheets (Google Visualization API) ----------
-async function buscarDadosPlanilha(aba) {
-  const alvo = aba.GID
-    ? `gid=${encodeURIComponent(aba.GID)}`
-    : `sheet=${encodeURIComponent(aba.SHEET_NAME)}`;
+async function buscarDadosPlanilha() {
+  const f = CONFIG.FONTE;
+  const alvo = f.GID
+    ? `gid=${encodeURIComponent(f.GID)}`
+    : `sheet=${encodeURIComponent(f.SHEET_NAME)}`;
   const url =
-    `https://docs.google.com/spreadsheets/d/${aba.GOOGLE_SHEET_ID}/gviz/tq` +
+    `https://docs.google.com/spreadsheets/d/${f.GOOGLE_SHEET_ID}/gviz/tq` +
     `?tqx=out:json&${alvo}`;
 
   const res = await fetch(url);
   if (!res.ok) {
     throw new Error(
-      `Não foi possível acessar a planilha ${aba.nome} (HTTP ${res.status}). ` +
-      `Verifique se ela ainda está compartilhada como "Qualquer pessoa com o link pode visualizar".`
+      `Não foi possível acessar a planilha (HTTP ${res.status}). ` +
+      `Verifique se ela está compartilhada como "Qualquer pessoa com o link pode visualizar" ` +
+      `e se é um Google Sheets de verdade (arquivo .xlsx enviado ao Drive não funciona: use Arquivo → Salvar como Google Sheets).`
     );
   }
 
@@ -87,71 +93,116 @@ async function buscarDadosPlanilha(aba) {
     throw new Error("Não foi possível interpretar os dados retornados pela planilha.");
   }
 
+  if (json.status === "error") {
+    const det = json.errors && json.errors[0] ? (json.errors[0].detailed_message || json.errors[0].message) : "";
+    throw new Error(`O Google Sheets recusou a leitura da aba. ${det}`.trim());
+  }
   if (!json.table || !json.table.cols || !json.table.rows) {
-    throw new Error(`A planilha ${aba.nome} não retornou nenhuma tabela de dados.`);
+    throw new Error("A aba não retornou nenhuma tabela de dados.");
   }
 
   return json.table;
 }
 
+// ---------- Localiza a linha de cabeçalho (a aba tem título e aviso acima) ----------
+// O Google às vezes trata a linha de cabeçalho como rótulos das colunas e às
+// vezes como uma linha de dados; aqui funcionam os dois casos.
+function localizarCabecalho(table) {
+  const candidatos = [{ cells: table.cols.map((c) => ({ v: c.label })), inicio: 0 }];
+  table.rows.slice(0, 15).forEach((r, i) => candidatos.push({ cells: r.c || [], inicio: i + 1 }));
+
+  for (const cand of candidatos) {
+    const nomes = cand.cells.map((c) => normalizar(c && c.v != null ? c.v : ""));
+    if (nomes.includes("MATERIAL") && (nomes.includes("CODIGO") || nomes.includes("SMART"))) {
+      return { nomes, inicio: cand.inicio };
+    }
+  }
+  throw new Error(
+    "Não encontrei a linha de cabeçalho (com as colunas Código e Material) nas primeiras linhas da aba. " +
+    "Confira se o GID em config.js é o da aba TOTAL CONSOLIDADO."
+  );
+}
+
 // ---------- Mapeia as colunas pelo nome do cabeçalho ----------
-function mapearColunas(cols) {
-  const idx = { smart: -1, material: -1, estoque: -1, consumoMedio: -1, consumoDiario: -1 };
+function mapearColunas(nomes) {
+  const acha = (fn) => nomes.findIndex(fn);
+  const idx = {
+    aba: acha((n) => n === "ABA"),
+    codigo: acha((n) => n === "CODIGO" || n === "SMART"),
+    material: acha((n) => n.startsWith("MATERIAL")),
+    qtdCentral: acha((n) => n.includes("CENTRAL")),
+    qtdSatelite: acha((n) => n.includes("SATELITE")),
+    total: acha((n) => n.startsWith("TOTAL")),
+    diario: acha((n) => n.includes("CONSUMO") && n.includes("DIARIO")),
+    mensal: acha((n) => n.includes("CONSUMO") && n.includes("MENSAL")),
+    meses: acha((n) => n.includes("MESES")),
+    status: acha((n) => n === "STATUS"),
+  };
 
-  cols.forEach((col, i) => {
-    const label = normalizar(col.label);
-    if (label === "SMART") idx.smart = i;
-    else if (label.startsWith("MATERIAL")) idx.material = i;
-    else if (label.includes("ESTOQUE")) idx.estoque = i;
-    else if (label.includes("CONSUMO") && label.includes("MEDIO")) idx.consumoMedio = i;
-    // OBS: a coluna da planilha se chama "CONSUMO MENSAL", mas os valores nela
-    // já são usados como consumo DIÁRIO na aba PAINEL PRINCIPAL (conferido: os
-    // números batem 1 a 1 com a coluna "Consumo Diário" de lá, sem divisão).
-    // Por isso mapeamos ela direto para consumoDiario, sem dividir por 30.
-    else if (label.includes("CONSUMO") && (label.includes("MENSAL") || label.includes("DIARIO") || label.includes("DIA"))) idx.consumoDiario = i;
-  });
-
-  const faltando = Object.entries(idx)
-    .filter(([campo, i]) => i === -1 && campo !== "consumoMedio")
-    .map(([campo]) => campo);
-
+  const obrigatorias = ["aba", "codigo", "material", "total", "diario"];
+  const faltando = obrigatorias.filter((c) => idx[c] === -1);
   if (faltando.length > 0) {
     throw new Error(
       `Não encontrei na planilha as colunas: ${faltando.join(", ")}. ` +
-      `Confira se os nomes das colunas continuam sendo SMART, MATERIAL, QTD ESTOQUE e CONSUMO MENSAL (usada como consumo diário).`
+      `Confira se os cabeçalhos continuam sendo Aba, Código, Material, Total Estoque e Consumo Diário.`
     );
   }
-
   return idx;
 }
 
-// ---------- Classifica um item segundo as regras do painel ----------
-function classificar(estoque, consumoDiario) {
-  if (estoque === 0 && consumoDiario > 0) return { status: "CRITICO", label: "ZERADO" };
-  if (consumoDiario === 0) return { status: "SEM_CONSUMO", label: "SEM CONSUMO" };
-  const autonomia = estoque / consumoDiario;
-  if (autonomia < CONFIG.DIAS_LIMITE_ALERTA) return { status: "ALERTA", label: Math.round(autonomia) + "d" };
+function formatarMeses(m) {
+  return m.toLocaleString("pt-BR", { maximumFractionDigits: 1 }) + " m";
+}
+
+// ---------- Define o status do item ----------
+// Usa o Status calculado na própria planilha. Só recalcula se ele vier vazio.
+function classificar(statusTxt, total, consumoDiario, consumoMensal, meses) {
+  if (total === 0 && consumoDiario > 0) return { status: "CRITICO", label: "ZERADO" };
+
+  const s = normalizar(statusTxt);
+  if (s.includes("CRIT")) return { status: "CRITICO", label: meses != null ? formatarMeses(meses) : "CRÍTICO" };
+  if (s.includes("ATEN") || s.includes("ALERT")) return { status: "ALERTA", label: meses != null ? formatarMeses(meses) : "ATENÇÃO" };
+  if (s.includes("OTIMO") || s === "OK") return { status: "OK", label: "OK" };
+
+  // Status vazio na planilha: calcula pela mesma regra (meses de estoque).
+  let m = meses;
+  if (m == null && consumoMensal > 0) m = total / consumoMensal;
+  if (m == null && consumoDiario > 0) m = total / (consumoDiario * 30);
+  if (m == null) return { status: "SEM_CONSUMO", label: "SEM CONSUMO" };
+  if (m <= CONFIG.MESES_CRITICO) return { status: "CRITICO", label: formatarMeses(m) };
+  if (m <= CONFIG.MESES_ATENCAO) return { status: "ALERTA", label: formatarMeses(m) };
   return { status: "OK", label: "OK" };
 }
 
 // ---------- Transforma as linhas cruas da planilha em itens do painel ----------
-function processarLinhas(table, local) {
-  const idx = mapearColunas(table.cols);
+function processarLinhas(table) {
+  const cab = localizarCabecalho(table);
+  const idx = mapearColunas(cab.nomes);
   const itens = [];
-  for (const row of table.rows) {
+
+  for (const row of table.rows.slice(cab.inicio)) {
     const cells = row.c || [];
-    const smart = parseTextoCell(cells[idx.smart]);
+    const smart = parseTextoCell(cells[idx.codigo]);
     const material = parseTextoCell(cells[idx.material]);
-    if (!smart && !material) continue;
+    if (!smart && !material) continue; // linhas de fórmula em branco
 
-    const estoque = parseNumeroCell(cells[idx.estoque]);
-    const consumoMedio = idx.consumoMedio > -1 ? parseNumeroCell(cells[idx.consumoMedio]) : null;
-    const consumoDiario = parseNumeroCell(cells[idx.consumoDiario]);
+    const local = parseTextoCell(cells[idx.aba]) || "—";
+    const total = parseNumeroCell(cells[idx.total]);
+    const consumoDiario = parseNumeroCell(cells[idx.diario]);
+    const consumoMensal = idx.mensal > -1 ? parseNumeroCell(cells[idx.mensal]) : 0;
+    const meses = idx.meses > -1 ? parseNumeroOuNull(cells[idx.meses]) : null;
+    const qtdCentral = idx.qtdCentral > -1 ? parseNumeroCell(cells[idx.qtdCentral]) : null;
+    const qtdSatelite = idx.qtdSatelite > -1 ? parseNumeroCell(cells[idx.qtdSatelite]) : null;
+    const statusTxt = idx.status > -1 ? parseTextoCell(cells[idx.status]) : "";
 
-    const { status, label } = classificar(estoque, consumoDiario);
-    const autonomia = consumoDiario > 0 ? Math.round(estoque / consumoDiario) : null;
+    const { status, label } = classificar(statusTxt, total, consumoDiario, consumoMensal, meses);
 
-    itens.push({ local, smart, material, estoque, consumoMedio, consumoDiario, autonomia, status, statusLabel: label });
+    itens.push({
+      local, smart, material,
+      estoque: total, qtdCentral, qtdSatelite,
+      consumoDiario, consumoMensal, meses,
+      status, statusLabel: label,
+    });
   }
   return itens;
 }
@@ -161,35 +212,13 @@ async function carregarPainel() {
   mostrarCarregando(true);
   esconderErro();
   try {
-    // Carrega Central e Satélite em paralelo; se um falhar, mostra o outro.
-    const resultados = await Promise.allSettled(
-      CONFIG.ABAS.map(async (aba) => {
-        const table = await buscarDadosPlanilha(aba);
-        try {
-          return processarLinhas(table, aba.nome);
-        } catch (e) {
-          throw new Error(`[${aba.nome}] ${e.message}`);
-        }
-      })
-    );
-
-    const itens = [];
-    const erros = [];
-    resultados.forEach((r, i) => {
-      if (r.status === "fulfilled") itens.push(...r.value);
-      else erros.push(r.reason && r.reason.message ? r.reason.message : `Falha ao carregar ${CONFIG.ABAS[i].nome}.`);
-    });
-
-    if (itens.length === 0 && erros.length > 0) {
-      throw new Error(erros.join(" | "));
-    }
-
+    const table = await buscarDadosPlanilha();
+    const itens = processarLinhas(table);
     itens.forEach((it, i) => { it.id = i; });
     state.itens = itens;
     render();
     marcarUltimaAtualizacao();
     els.conteudo.classList.remove("escondido");
-    if (erros.length > 0) mostrarErro(erros.join(" | "), true);
   } catch (err) {
     console.error(err);
     mostrarErro(err.message || "Erro desconhecido ao carregar os dados.");
@@ -248,15 +277,17 @@ function escapeHtml(txt) {
 // ---------- Filtra por busca, monta as duas colunas e os cards ----------
 function render() {
   const termo = normalizar(state.busca);
-  const nomeAba = (CONFIG.ABAS.find((a) => a.id === state.abaAtiva) || {}).nome;
-  const visiveis = state.abaAtiva === "todos" ? state.itens : state.itens.filter((i) => i.local === nomeAba);
+  const nomeAba = (CONFIG.LOCAIS.find((a) => a.id === state.abaAtiva) || {}).nome;
+  const visiveis = state.abaAtiva === "todos"
+    ? state.itens
+    : state.itens.filter((i) => normalizar(i.local) === normalizar(nomeAba));
   const filtrados = visiveis.filter(
     (i) => !termo || normalizar(i.smart).includes(termo) || normalizar(i.material).includes(termo)
   );
 
   const risco = filtrados
     .filter((i) => i.status === "CRITICO" || i.status === "ALERTA")
-    .sort((a, b) => (a.status === "CRITICO" ? 0 : 1) - (b.status === "CRITICO" ? 0 : 1) || (a.autonomia ?? 0) - (b.autonomia ?? 0));
+    .sort((a, b) => (a.status === "CRITICO" ? 0 : 1) - (b.status === "CRITICO" ? 0 : 1) || (a.meses ?? 0) - (b.meses ?? 0));
   const ok = filtrados
     .filter((i) => i.status === "OK" || i.status === "SEM_CONSUMO")
     .sort((a, b) => (a.status === "OK" ? 0 : 1) - (b.status === "OK" ? 0 : 1));
@@ -291,16 +322,19 @@ function render() {
 
 // ---------- Modal de detalhes ----------
 function abrirModal(item) {
+  const n = (v) => (v === null || v === undefined ? "—" : v.toLocaleString("pt-BR"));
   els.modalConteudo.innerHTML = `
     <h3>${escapeHtml(item.material)}</h3>
     <dl class="modal-lista">
       <dt>Local</dt><dd>${escapeHtml(item.local)}</dd>
       <dt>SMART</dt><dd>${escapeHtml(item.smart)}</dd>
       <dt>Descrição</dt><dd>${escapeHtml(item.material)}</dd>
-      <dt>Estoque atual</dt><dd>${item.estoque.toLocaleString("pt-BR")}</dd>
-      <dt>Consumo médio</dt><dd>${item.consumoMedio === null ? "—" : item.consumoMedio.toLocaleString("pt-BR")}</dd>
-      <dt>Consumo diário</dt><dd>${item.consumoDiario.toLocaleString("pt-BR")}</dd>
-      <dt>Autonomia</dt><dd>${item.autonomia === null ? "Sem consumo" : item.autonomia + " dias"}</dd>
+      <dt>Qtd. Central</dt><dd>${n(item.qtdCentral)}</dd>
+      <dt>Qtd. Satélite</dt><dd>${n(item.qtdSatelite)}</dd>
+      <dt>Total em estoque</dt><dd>${n(item.estoque)}</dd>
+      <dt>Consumo diário</dt><dd>${n(item.consumoDiario)}</dd>
+      <dt>Consumo mensal</dt><dd>${n(item.consumoMensal)}</dd>
+      <dt>Meses de estoque</dt><dd>${item.meses === null ? "Sem consumo" : item.meses.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}</dd>
       <dt>Status</dt><dd><span class="${badgeClasse(item.status)}">${escapeHtml(item.statusLabel)}</span></dd>
     </dl>`;
   els.modal.classList.remove("escondido");
