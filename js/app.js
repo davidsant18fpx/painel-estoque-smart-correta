@@ -94,19 +94,35 @@ async function buscarDadosPlanilha() {
 
 // ---------- Mapeia as colunas pelo nome do cabeçalho ----------
 function mapearColunas(cols) {
-  const idx = { smart: -1, material: -1, estoque: -1, consumoMedio: -1, consumoDiario: -1 };
+  const idx = {
+    smart: -1,
+    material: -1,
+    estoque: -1,
+    consumoMedio: -1,
+    consumoDiario: -1
+  };
 
   cols.forEach((col, i) => {
     const label = normalizar(col.label);
+
     if (label === "SMART") idx.smart = i;
     else if (label.startsWith("MATERIAL")) idx.material = i;
     else if (label.includes("ESTOQUE")) idx.estoque = i;
-    else if (label.includes("CONSUMO") && label.includes("MEDIO")) idx.consumoMedio = i;
-    // OBS: a coluna da planilha se chama "CONSUMO MENSAL", mas os valores nela
-    // já são usados como consumo DIÁRIO na aba PAINEL PRINCIPAL (conferido: os
-    // números batem 1 a 1 com a coluna "Consumo Diário" de lá, sem divisão).
-    // Por isso mapeamos ela direto para consumoDiario, sem dividir por 30.
-    else if (label.includes("CONSUMO") && (label.includes("MENSAL") || label.includes("DIARIO") || label.includes("DIA"))) idx.consumoDiario = i;
+    else if (label.includes("CONSUMO") && label.includes("MEDIO"))
+      idx.consumoMedio = i;
+
+    // OBS: a coluna da planilha se chama "CONSUMO MENSAL",
+    // mas os valores nela já são usados como consumo DIÁRIO
+    // na aba PAINEL PRINCIPAL.
+    else if (
+      label.includes("CONSUMO") &&
+      (
+        label.includes("MENSAL") ||
+        label.includes("DIARIO") ||
+        label.includes("DIA")
+      )
+    )
+      idx.consumoDiario = i;
   });
 
   const faltando = Object.entries(idx)
@@ -125,32 +141,70 @@ function mapearColunas(cols) {
 
 // ---------- Classifica um item segundo as regras do painel ----------
 function classificar(estoque, consumoDiario) {
-  if (estoque === 0 && consumoDiario > 0) return { status: "CRITICO", label: "ZERADO" };
-  if (consumoDiario === 0) return { status: "SEM_CONSUMO", label: "SEM CONSUMO" };
+  if (estoque === 0 && consumoDiario > 0)
+    return { status: "CRITICO", label: "ZERADO" };
+
+  if (consumoDiario === 0)
+    return { status: "SEM_CONSUMO", label: "SEM CONSUMO" };
+
   const autonomia = estoque / consumoDiario;
-  if (autonomia < CONFIG.DIAS_LIMITE_ALERTA) return { status: "ALERTA", label: Math.round(autonomia) + "d" };
-  return { status: "OK", label: "OK" };
+
+  if (autonomia < CONFIG.DIAS_LIMITE_ALERTA)
+    return {
+      status: "ALERTA",
+      label: Math.round(autonomia) + "d"
+    };
+
+  return {
+    status: "OK",
+    label: "OK"
+  };
 }
 
 // ---------- Transforma as linhas cruas da planilha em itens do painel ----------
 function processarLinhas(table) {
   const idx = mapearColunas(table.cols);
   const itens = [];
+
   for (const row of table.rows) {
     const cells = row.c || [];
+
     const smart = parseTextoCell(cells[idx.smart]);
     const material = parseTextoCell(cells[idx.material]);
+
     if (!smart && !material) continue;
 
     const estoque = parseNumeroCell(cells[idx.estoque]);
-    const consumoMedio = idx.consumoMedio > -1 ? parseNumeroCell(cells[idx.consumoMedio]) : null;
+
+    const consumoMedio =
+      idx.consumoMedio > -1
+        ? parseNumeroCell(cells[idx.consumoMedio])
+        : null;
+
     const consumoDiario = parseNumeroCell(cells[idx.consumoDiario]);
 
-    const { status, label } = classificar(estoque, consumoDiario);
-    const autonomia = consumoDiario > 0 ? Math.round(estoque / consumoDiario) : null;
+    const { status, label } = classificar(
+      estoque,
+      consumoDiario
+    );
 
-    itens.push({ smart, material, estoque, consumoMedio, consumoDiario, autonomia, status, statusLabel: label });
+    const autonomia =
+      consumoDiario > 0
+        ? Math.round(estoque / consumoDiario)
+        : null;
+
+    itens.push({
+      smart,
+      material,
+      estoque,
+      consumoMedio,
+      consumoDiario,
+      autonomia,
+      status,
+      statusLabel: label
+    });
   }
+
   return itens;
 }
 
@@ -158,15 +212,25 @@ function processarLinhas(table) {
 async function carregarPainel() {
   mostrarCarregando(true);
   esconderErro();
+
   try {
     const table = await buscarDadosPlanilha();
+
     state.itens = processarLinhas(table);
+
     render();
+
     marcarUltimaAtualizacao();
+
     els.conteudo.classList.remove("escondido");
+
   } catch (err) {
     console.error(err);
-    mostrarErro(err.message || "Erro desconhecido ao carregar os dados.");
+
+    mostrarErro(
+      err.message || "Erro desconhecido ao carregar os dados."
+    );
+
   } finally {
     mostrarCarregando(false);
   }
@@ -174,13 +238,20 @@ async function carregarPainel() {
 
 function mostrarCarregando(ligado) {
   els.loading.classList.toggle("escondido", !ligado);
+
   els.btnAtualizar.disabled = ligado;
-  els.btnAtualizar.textContent = ligado ? "🔄 Atualizando..." : "🔄 Atualizar dados";
+
+  els.btnAtualizar.textContent =
+    ligado
+      ? "🔄 Atualizando..."
+      : "🔄 Atualizar dados";
 }
 
 function mostrarErro(msg) {
   els.erroMsg.textContent = msg;
+
   els.erro.classList.remove("escondido");
+
   els.conteudo.classList.add("escondido");
 }
 
@@ -190,16 +261,25 @@ function esconderErro() {
 
 function marcarUltimaAtualizacao() {
   const agora = new Date();
+
   const dd = String(agora.getDate()).padStart(2, "0");
   const mm = String(agora.getMonth() + 1).padStart(2, "0");
   const yyyy = agora.getFullYear();
+
   const hh = String(agora.getHours()).padStart(2, "0");
   const min = String(agora.getMinutes()).padStart(2, "0");
-  els.ultimaAtualizacao.textContent = `Última atualização: ${dd}/${mm}/${yyyy} ${hh}:${min}`;
+
+  els.ultimaAtualizacao.textContent =
+    `Última atualização: ${dd}/${mm}/${yyyy} ${hh}:${min}`;
 }
 
 function badgeClasse(status) {
-  return { CRITICO: "badge badge-critico", ALERTA: "badge badge-alerta", OK: "badge badge-ok", SEM_CONSUMO: "badge badge-sem-consumo" }[status];
+  return {
+    CRITICO: "badge badge-critico",
+    ALERTA: "badge badge-alerta",
+    OK: "badge badge-ok",
+    SEM_CONSUMO: "badge badge-sem-consumo"
+  }[status];
 }
 
 function linhaHtml(item) {
@@ -208,71 +288,173 @@ function linhaHtml(item) {
     <td>${escapeHtml(item.material)}</td>
     <td class="col-num">${item.estoque.toLocaleString("pt-BR")}</td>
     <td class="col-num">${item.consumoDiario.toLocaleString("pt-BR")}</td>
-    <td><span class="${badgeClasse(item.status)}">${escapeHtml(item.statusLabel)}</span></td>
+    <td>
+      <span class="${badgeClasse(item.status)}">
+        ${escapeHtml(item.statusLabel)}
+      </span>
+    </td>
   </tr>`;
 }
 
 function escapeHtml(txt) {
   const div = document.createElement("div");
+
   div.textContent = txt;
+
   return div.innerHTML;
 }
 
 // ---------- Filtra por busca, monta as duas colunas e os cards ----------
 function render() {
   const termo = normalizar(state.busca);
+
   const filtrados = state.itens.filter(
-    (i) => !termo || normalizar(i.smart).includes(termo) || normalizar(i.material).includes(termo)
+    (i) =>
+      !termo ||
+      normalizar(i.smart).includes(termo) ||
+      normalizar(i.material).includes(termo)
   );
 
   const risco = filtrados
-    .filter((i) => i.status === "CRITICO" || i.status === "ALERTA")
-    .sort((a, b) => (a.status === "CRITICO" ? 0 : 1) - (b.status === "CRITICO" ? 0 : 1) || (a.autonomia ?? 0) - (b.autonomia ?? 0));
+    .filter(
+      (i) =>
+        i.status === "CRITICO" ||
+        i.status === "ALERTA"
+    )
+    .sort(
+      (a, b) =>
+        (a.status === "CRITICO" ? 0 : 1) -
+          (b.status === "CRITICO" ? 0 : 1) ||
+        (a.autonomia ?? 0) -
+          (b.autonomia ?? 0)
+    );
+
   const ok = filtrados
-    .filter((i) => i.status === "OK" || i.status === "SEM_CONSUMO")
-    .sort((a, b) => (a.status === "OK" ? 0 : 1) - (b.status === "OK" ? 0 : 1));
+    .filter(
+      (i) =>
+        i.status === "OK" ||
+        i.status === "SEM_CONSUMO"
+    )
+    .sort(
+      (a, b) =>
+        (a.status === "OK" ? 0 : 1) -
+        (b.status === "OK" ? 0 : 1)
+    );
 
-  els.corpoRisco.innerHTML = risco.map(linhaHtml).join("") ||
-    `<tr><td colspan="5" class="tabela-vazia">Nenhum item encontrado.</td></tr>`;
-  els.corpoOk.innerHTML = ok.map(linhaHtml).join("") ||
-    `<tr><td colspan="5" class="tabela-vazia">Nenhum item encontrado.</td></tr>`;
+  els.corpoRisco.innerHTML =
+    risco.map(linhaHtml).join("") ||
+    `<tr>
+      <td colspan="5" class="tabela-vazia">
+        Nenhum item encontrado.
+      </td>
+    </tr>`;
 
-  els.cardCritico.textContent = state.itens.filter((i) => i.status === "CRITICO").length;
-  els.cardAlerta.textContent = state.itens.filter((i) => i.status === "ALERTA").length;
-  els.cardOk.textContent = state.itens.filter((i) => i.status === "OK").length;
-  els.cardTotal.textContent = state.itens.length;
+  els.corpoOk.innerHTML =
+    ok.map(linhaHtml).join("") ||
+    `<tr>
+      <td colspan="5" class="tabela-vazia">
+        Nenhum item encontrado.
+      </td>
+    </tr>`;
+
+  els.cardCritico.textContent =
+    state.itens.filter(
+      (i) => i.status === "CRITICO"
+    ).length;
+
+  els.cardAlerta.textContent =
+    state.itens.filter(
+      (i) => i.status === "ALERTA"
+    ).length;
+
+  els.cardOk.textContent =
+    state.itens.filter(
+      (i) => i.status === "OK"
+    ).length;
+
+  els.cardTotal.textContent =
+    state.itens.length;
 
   const criticosPorConsumo = state.itens
-    .filter((i) => i.status === "CRITICO")
-    .sort((a, b) => b.consumoDiario - a.consumoDiario)
+    .filter(
+      (i) => i.status === "CRITICO"
+    )
+    .sort(
+      (a, b) =>
+        b.consumoDiario -
+        a.consumoDiario
+    )
     .slice(0, 3);
-  els.acaoRecomendada.innerHTML = criticosPorConsumo.length
-    ? `⚠️ <b>Ação recomendada:</b> cobrar entregas pendentes para os itens zerados de maior giro (códigos ${criticosPorConsumo
-        .map((i) => escapeHtml(i.smart))
-        .join(", ")}).`
-    : `Nenhum item crítico no momento.`;
 
-  document.querySelectorAll("#corpo-risco tr[data-smart], #corpo-ok tr[data-smart]").forEach((tr) => {
-    tr.addEventListener("click", () => {
-      const item = state.itens.find((i) => i.smart === tr.dataset.smart);
-      if (item) abrirModal(item);
+  els.acaoRecomendada.innerHTML =
+    criticosPorConsumo.length
+      ? `⚠️ <b>Ação recomendada:</b> cobrar entregas pendentes para os itens zerados de maior giro (códigos ${criticosPorConsumo
+          .map((i) => escapeHtml(i.smart))
+          .join(", ")}).`
+      : `Nenhum item crítico no momento.`;
+
+  document
+    .querySelectorAll(
+      "#corpo-risco tr[data-smart], #corpo-ok tr[data-smart]"
+    )
+    .forEach((tr) => {
+      tr.addEventListener("click", () => {
+        const item = state.itens.find(
+          (i) => i.smart === tr.dataset.smart
+        );
+
+        if (item) abrirModal(item);
+      });
     });
-  });
 }
 
 // ---------- Modal de detalhes ----------
 function abrirModal(item) {
   els.modalConteudo.innerHTML = `
     <h3>${escapeHtml(item.material)}</h3>
+
     <dl class="modal-lista">
-      <dt>SMART</dt><dd>${escapeHtml(item.smart)}</dd>
-      <dt>Descrição</dt><dd>${escapeHtml(item.material)}</dd>
-      <dt>Estoque atual</dt><dd>${item.estoque.toLocaleString("pt-BR")}</dd>
-      <dt>Consumo médio</dt><dd>${item.consumoMedio === null ? "—" : item.consumoMedio.toLocaleString("pt-BR")}</dd>
-      <dt>Consumo diário</dt><dd>${item.consumoDiario.toLocaleString("pt-BR")}</dd>
-      <dt>Autonomia</dt><dd>${item.autonomia === null ? "Sem consumo" : item.autonomia + " dias"}</dd>
-      <dt>Status</dt><dd><span class="${badgeClasse(item.status)}">${escapeHtml(item.statusLabel)}</span></dd>
-    </dl>`;
+
+      <dt>SMART</dt>
+      <dd>${escapeHtml(item.smart)}</dd>
+
+      <dt>Descrição</dt>
+      <dd>${escapeHtml(item.material)}</dd>
+
+      <dt>Estoque atual</dt>
+      <dd>${item.estoque.toLocaleString("pt-BR")}</dd>
+
+      <dt>Consumo médio</dt>
+      <dd>
+        ${
+          item.consumoMedio === null
+            ? "—"
+            : item.consumoMedio.toLocaleString("pt-BR")
+        }
+      </dd>
+
+      <dt>Consumo diário</dt>
+      <dd>${item.consumoDiario.toLocaleString("pt-BR")}</dd>
+
+      <dt>Autonomia</dt>
+      <dd>
+        ${
+          item.autonomia === null
+            ? "Sem consumo"
+            : item.autonomia + " dias"
+        }
+      </dd>
+
+      <dt>Status</dt>
+      <dd>
+        <span class="${badgeClasse(item.status)}">
+          ${escapeHtml(item.statusLabel)}
+        </span>
+      </dd>
+
+    </dl>
+  `;
+
   els.modal.classList.remove("escondido");
 }
 
@@ -283,27 +465,73 @@ function fecharModal() {
 // ---------- Eventos ----------
 els.abasBotoes.forEach((btn) => {
   btn.addEventListener("click", () => {
-    if (btn.dataset.aba === state.abaAtiva) return;
+
+    if (btn.dataset.aba === state.abaAtiva)
+      return;
+
     state.abaAtiva = btn.dataset.aba;
-    els.abasBotoes.forEach((b) => b.classList.toggle("ativa", b === btn));
+
+    els.abasBotoes.forEach(
+      (b) =>
+        b.classList.toggle(
+          "ativa",
+          b === btn
+        )
+    );
+
     carregarPainel();
   });
 });
 
-els.btnAtualizar.addEventListener("click", carregarPainel);
-els.buscaInput.addEventListener("input", (e) => {
-  state.busca = e.target.value;
-  render();
-});
-els.modalFechar.addEventListener("click", fecharModal);
-els.modal.addEventListener("click", (e) => { if (e.target === els.modal) fecharModal(); });
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") fecharModal(); });
+els.btnAtualizar.addEventListener(
+  "click",
+  carregarPainel
+);
+
+els.buscaInput.addEventListener(
+  "input",
+  (e) => {
+    state.busca = e.target.value;
+    render();
+  }
+);
+
+els.modalFechar.addEventListener(
+  "click",
+  fecharModal
+);
+
+els.modal.addEventListener(
+  "click",
+  (e) => {
+    if (e.target === els.modal)
+      fecharModal();
+  }
+);
+
+document.addEventListener(
+  "keydown",
+  (e) => {
+    if (e.key === "Escape")
+      fecharModal();
+  }
+);
 
 // ---------- Atualização automática ----------
 function configurarAutoRefresh() {
-  if (state.autoRefreshTimer) clearInterval(state.autoRefreshTimer);
+
+  if (state.autoRefreshTimer)
+    clearInterval(
+      state.autoRefreshTimer
+    );
+
   if (CONFIG.AUTO_REFRESH_MINUTOS > 0) {
-    state.autoRefreshTimer = setInterval(carregarPainel, CONFIG.AUTO_REFRESH_MINUTOS * 60 * 1000);
+
+    state.autoRefreshTimer =
+      setInterval(
+        carregarPainel,
+        CONFIG.AUTO_REFRESH_MINUTOS * 60 * 1000
+      );
   }
 }
 
