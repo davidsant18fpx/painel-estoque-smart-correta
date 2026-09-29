@@ -20,10 +20,11 @@ const CONFIG = {
     {
       id: "satelite",
       nome: "Satélite",
-      // TODO: trocar pelo ID/aba da planilha do estoque Satélite quando você enviar.
-      // Por enquanto está apontando pra mesma planilha da Central.
-      GOOGLE_SHEET_ID: "1sE6uC5h53jSlCYqM605FsWz2XCbmmQWeLSD5Z1VAJI4",
-      SHEET_NAME: "DADOS_SMART",
+      // Planilha do Satélite. A aba é identificada pelo GID (o número que
+      // aparece depois de "gid=" na URL da planilha), em vez do nome.
+      // Se preferir usar o nome da aba, apague o GID e preencha SHEET_NAME.
+      GOOGLE_SHEET_ID: "1s1MmD9pKrEzlj-tA1iVykveg7f7gqBNK",
+      GID: "338326866",
     },
   ],
 
