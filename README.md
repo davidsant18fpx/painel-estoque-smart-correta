@@ -224,16 +224,26 @@ estático como este (veja a seção 6).
 
 ---
 
-## 11. Visão combinada Central + Satélite
+## 11. Fonte atual: aba TOTAL CONSOLIDADO (Central + Satélite)
 
-- A aba **Todos** (padrão) junta os itens do Central e do Satélite nas duas
-  colunas (vermelha = zerados/em risco, verde = estoque regular). Cada linha
-  tem uma etiqueta **Local** indicando de onde veio. O mesmo código SMART pode
-  aparecer duas vezes, uma por local, cada um com seu próprio status.
-- Os botões **Central** e **Satélite** filtram a visão (sem nova busca).
-- O Satélite usa a planilha `1s1MmD9pKrEzlj-tA1iVykveg7f7gqBNK`, aba de
-  `gid=338326866` (configurado em `js/config.js`).
-- Se uma das duas planilhas falhar, o painel mostra a outra e exibe um aviso.
-- A planilha do Satélite precisa ser um **Google Sheets nativo**, compartilhado
-  como "Qualquer pessoa com o link → Leitor", e ter as colunas SMART, MATERIAL,
-  QTD ESTOQUE e CONSUMO (mesmos nomes da Central).
+Esta seção substitui o que as seções 3, 4 e 10 dizem sobre `DADOS_SMART`,
+`ABAS` e dias de autonomia.
+
+- O painel lê **uma única aba**, `TOTAL CONSOLIDADO`, da planilha
+  `1s1MmD9pKrEzlj-tA1iVykveg7f7gqBNK` (`gid=338326866`), configurada em
+  `js/config.js` (`FONTE`).
+- A aba tem título e aviso nas primeiras linhas e o cabeçalho na linha 4; o
+  painel localiza o cabeçalho sozinho. Colunas lidas: Aba, Código, Material,
+  Qtd. Central, Qtd. Satélite, Total Estoque, Consumo Diário, Meses de Estoque,
+  Status, Consumo Mensal.
+- O status vem da própria planilha (Crítico até 1,5 mês, Atenção de 1,5 a 2,5,
+  Ótimo acima de 2,5). Itens com estoque total zero e consumo aparecem como
+  ZERADO. Se o Status vier vazio num item com consumo, o painel calcula pela
+  mesma regra (`MESES_CRITICO` e `MESES_ATENCAO` no config).
+- Coluna vermelha = críticos e atenção; coluna verde = ótimos e sem consumo,
+  com Central e Satélite juntos (etiqueta **Local**, vinda da coluna Aba).
+  Os botões Central e Satélite filtram por essa coluna.
+- **Importante:** a planilha precisa ser um Google Sheets nativo, compartilhado
+  como "Qualquer pessoa com o link → Leitor". Um arquivo .xlsx enviado ao Drive
+  (aparece com a etiqueta ".XLSX" ao lado do nome) não funciona: use
+  Arquivo → Salvar como Google Sheets e troque o ID/GID no `config.js`.
