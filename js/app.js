@@ -7,7 +7,7 @@
 const state = {
   itens: [],
   busca: "",
-  abaAtiva: CONFIG.ABAS[0].id,
+  abaAtiva: "todos",
   autoRefreshTimer: null,
 };
 
@@ -57,16 +57,18 @@ function parseTextoCell(cell) {
 }
 
 // ---------- Busca os dados no Google Sheets (Google Visualization API) ----------
-async function buscarDadosPlanilha() {
-  const aba = CONFIG.ABAS.find((a) => a.id === state.abaAtiva) || CONFIG.ABAS[0];
+async function buscarDadosPlanilha(aba) {
+  const alvo = aba.GID
+    ? `gid=${encodeURIComponent(aba.GID)}`
+    : `sheet=${encodeURIComponent(aba.SHEET_NAME)}`;
   const url =
     `https://docs.google.com/spreadsheets/d/${aba.GOOGLE_SHEET_ID}/gviz/tq` +
-    `?tqx=out:json&sheet=${encodeURIComponent(aba.SHEET_NAME)}`;
+    `?tqx=out:json&${alvo}`;
 
   const res = await fetch(url);
   if (!res.ok) {
     throw new Error(
-      `Não foi possível acessar a planilha (HTTP ${res.status}). ` +
+      `Não foi possível acessar a planilha ${aba.nome} (HTTP ${res.status}). ` +
       `Verifique se ela ainda está compartilhada como "Qualquer pessoa com o link pode visualizar".`
     );
   }
@@ -86,7 +88,7 @@ async function buscarDadosPlanilha() {
   }
 
   if (!json.table || !json.table.cols || !json.table.rows) {
-    throw new Error(`A aba "${aba.SHEET_NAME}" não retornou nenhuma tabela de dados.`);
+    throw new Error(`A planilha ${aba.nome} não retornou nenhuma tabela de dados.`);
   }
 
   return json.table;
@@ -133,7 +135,7 @@ function classificar(estoque, consumoDiario) {
 }
 
 // ---------- Transforma as linhas cruas da planilha em itens do painel ----------
-function processarLinhas(table) {
+function processarLinhas(table, local) {
   const idx = mapearColunas(table.cols);
   const itens = [];
   for (const row of table.rows) {
@@ -149,7 +151,7 @@ function processarLinhas(table) {
     const { status, label } = classificar(estoque, consumoDiario);
     const autonomia = consumoDiario > 0 ? Math.round(estoque / consumoDiario) : null;
 
-    itens.push({ smart, material, estoque, consumoMedio, consumoDiario, autonomia, status, statusLabel: label });
+    itens.push({ local, smart, material, estoque, consumoMedio, consumoDiario, autonomia, status, statusLabel: label });
   }
   return itens;
 }
@@ -159,11 +161,35 @@ async function carregarPainel() {
   mostrarCarregando(true);
   esconderErro();
   try {
-    const table = await buscarDadosPlanilha();
-    state.itens = processarLinhas(table);
+    // Carrega Central e Satélite em paralelo; se um falhar, mostra o outro.
+    const resultados = await Promise.allSettled(
+      CONFIG.ABAS.map(async (aba) => {
+        const table = await buscarDadosPlanilha(aba);
+        try {
+          return processarLinhas(table, aba.nome);
+        } catch (e) {
+          throw new Error(`[${aba.nome}] ${e.message}`);
+        }
+      })
+    );
+
+    const itens = [];
+    const erros = [];
+    resultados.forEach((r, i) => {
+      if (r.status === "fulfilled") itens.push(...r.value);
+      else erros.push(r.reason && r.reason.message ? r.reason.message : `Falha ao carregar ${CONFIG.ABAS[i].nome}.`);
+    });
+
+    if (itens.length === 0 && erros.length > 0) {
+      throw new Error(erros.join(" | "));
+    }
+
+    itens.forEach((it, i) => { it.id = i; });
+    state.itens = itens;
     render();
     marcarUltimaAtualizacao();
     els.conteudo.classList.remove("escondido");
+    if (erros.length > 0) mostrarErro(erros.join(" | "), true);
   } catch (err) {
     console.error(err);
     mostrarErro(err.message || "Erro desconhecido ao carregar os dados.");
@@ -178,10 +204,10 @@ function mostrarCarregando(ligado) {
   els.btnAtualizar.textContent = ligado ? "🔄 Atualizando..." : "🔄 Atualizar dados";
 }
 
-function mostrarErro(msg) {
+function mostrarErro(msg, manterConteudo = false) {
   els.erroMsg.textContent = msg;
   els.erro.classList.remove("escondido");
-  els.conteudo.classList.add("escondido");
+  if (!manterConteudo) els.conteudo.classList.add("escondido");
 }
 
 function esconderErro() {
@@ -203,7 +229,8 @@ function badgeClasse(status) {
 }
 
 function linhaHtml(item) {
-  return `<tr data-smart="${escapeHtml(item.smart)}">
+  return `<tr data-id="${item.id}">
+    <td><span class="tag-local">${escapeHtml(item.local)}</span></td>
     <td class="col-smart">${escapeHtml(item.smart)}</td>
     <td>${escapeHtml(item.material)}</td>
     <td class="col-num">${item.estoque.toLocaleString("pt-BR")}</td>
@@ -221,7 +248,9 @@ function escapeHtml(txt) {
 // ---------- Filtra por busca, monta as duas colunas e os cards ----------
 function render() {
   const termo = normalizar(state.busca);
-  const filtrados = state.itens.filter(
+  const nomeAba = (CONFIG.ABAS.find((a) => a.id === state.abaAtiva) || {}).nome;
+  const visiveis = state.abaAtiva === "todos" ? state.itens : state.itens.filter((i) => i.local === nomeAba);
+  const filtrados = visiveis.filter(
     (i) => !termo || normalizar(i.smart).includes(termo) || normalizar(i.material).includes(termo)
   );
 
@@ -233,28 +262,28 @@ function render() {
     .sort((a, b) => (a.status === "OK" ? 0 : 1) - (b.status === "OK" ? 0 : 1));
 
   els.corpoRisco.innerHTML = risco.map(linhaHtml).join("") ||
-    `<tr><td colspan="5" class="tabela-vazia">Nenhum item encontrado.</td></tr>`;
+    `<tr><td colspan="6" class="tabela-vazia">Nenhum item encontrado.</td></tr>`;
   els.corpoOk.innerHTML = ok.map(linhaHtml).join("") ||
-    `<tr><td colspan="5" class="tabela-vazia">Nenhum item encontrado.</td></tr>`;
+    `<tr><td colspan="6" class="tabela-vazia">Nenhum item encontrado.</td></tr>`;
 
-  els.cardCritico.textContent = state.itens.filter((i) => i.status === "CRITICO").length;
-  els.cardAlerta.textContent = state.itens.filter((i) => i.status === "ALERTA").length;
-  els.cardOk.textContent = state.itens.filter((i) => i.status === "OK").length;
-  els.cardTotal.textContent = state.itens.length;
+  els.cardCritico.textContent = visiveis.filter((i) => i.status === "CRITICO").length;
+  els.cardAlerta.textContent = visiveis.filter((i) => i.status === "ALERTA").length;
+  els.cardOk.textContent = visiveis.filter((i) => i.status === "OK").length;
+  els.cardTotal.textContent = visiveis.length;
 
-  const criticosPorConsumo = state.itens
+  const criticosPorConsumo = visiveis
     .filter((i) => i.status === "CRITICO")
     .sort((a, b) => b.consumoDiario - a.consumoDiario)
     .slice(0, 3);
   els.acaoRecomendada.innerHTML = criticosPorConsumo.length
     ? `⚠️ <b>Ação recomendada:</b> cobrar entregas pendentes para os itens zerados de maior giro (códigos ${criticosPorConsumo
-        .map((i) => escapeHtml(i.smart))
+        .map((i) => escapeHtml(i.smart) + " (" + escapeHtml(i.local) + ")")
         .join(", ")}).`
     : `Nenhum item crítico no momento.`;
 
-  document.querySelectorAll("#corpo-risco tr[data-smart], #corpo-ok tr[data-smart]").forEach((tr) => {
+  document.querySelectorAll("#corpo-risco tr[data-id], #corpo-ok tr[data-id]").forEach((tr) => {
     tr.addEventListener("click", () => {
-      const item = state.itens.find((i) => i.smart === tr.dataset.smart);
+      const item = state.itens.find((i) => i.id === Number(tr.dataset.id));
       if (item) abrirModal(item);
     });
   });
@@ -265,6 +294,7 @@ function abrirModal(item) {
   els.modalConteudo.innerHTML = `
     <h3>${escapeHtml(item.material)}</h3>
     <dl class="modal-lista">
+      <dt>Local</dt><dd>${escapeHtml(item.local)}</dd>
       <dt>SMART</dt><dd>${escapeHtml(item.smart)}</dd>
       <dt>Descrição</dt><dd>${escapeHtml(item.material)}</dd>
       <dt>Estoque atual</dt><dd>${item.estoque.toLocaleString("pt-BR")}</dd>
@@ -286,7 +316,7 @@ els.abasBotoes.forEach((btn) => {
     if (btn.dataset.aba === state.abaAtiva) return;
     state.abaAtiva = btn.dataset.aba;
     els.abasBotoes.forEach((b) => b.classList.toggle("ativa", b === btn));
-    carregarPainel();
+    render();
   });
 });
 
