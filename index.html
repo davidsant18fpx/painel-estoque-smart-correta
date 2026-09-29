@@ -22,7 +22,8 @@
   </header>
 
   <div class="abas-estoque">
-    <button class="aba-btn ativa" data-aba="central">Central</button>
+    <button class="aba-btn ativa" data-aba="todos">Todos</button>
+    <button class="aba-btn" data-aba="central">Central</button>
     <button class="aba-btn" data-aba="satelite">Satélite</button>
   </div>
 
@@ -63,7 +64,7 @@
         <div class="painel">
           <div class="painel-titulo titulo-vermelho">🔴 Itens zerados e em risco</div>
           <table>
-            <thead><tr><th>SMART</th><th>Material / Descrição</th><th>Estoque</th><th>Diário</th><th>Status</th></tr></thead>
+            <thead><tr><th>Local</th><th>SMART</th><th>Material / Descrição</th><th>Estoque</th><th>Diário</th><th>Status</th></tr></thead>
             <tbody id="corpo-risco"></tbody>
           </table>
         </div>
@@ -71,7 +72,7 @@
       <div class="painel">
         <div class="painel-titulo titulo-verde">🟢 Itens com estoque regular</div>
         <table>
-          <thead><tr><th>SMART</th><th>Material / Descrição</th><th>Estoque</th><th>Diário</th><th>Status</th></tr></thead>
+          <thead><tr><th>Local</th><th>SMART</th><th>Material / Descrição</th><th>Estoque</th><th>Diário</th><th>Status</th></tr></thead>
           <tbody id="corpo-ok"></tbody>
         </table>
       </div>
