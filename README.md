@@ -221,3 +221,19 @@ estático como este (veja a seção 6).
 - Acesso aos dados: link não listado (API pública de visualização do
   Google Sheets), sem backend, conforme sua escolha — ver seção 2 para
   as implicações de segurança.
+
+---
+
+## 11. Visão combinada Central + Satélite
+
+- A aba **Todos** (padrão) junta os itens do Central e do Satélite nas duas
+  colunas (vermelha = zerados/em risco, verde = estoque regular). Cada linha
+  tem uma etiqueta **Local** indicando de onde veio. O mesmo código SMART pode
+  aparecer duas vezes, uma por local, cada um com seu próprio status.
+- Os botões **Central** e **Satélite** filtram a visão (sem nova busca).
+- O Satélite usa a planilha `1s1MmD9pKrEzlj-tA1iVykveg7f7gqBNK`, aba de
+  `gid=338326866` (configurado em `js/config.js`).
+- Se uma das duas planilhas falhar, o painel mostra a outra e exibe um aviso.
+- A planilha do Satélite precisa ser um **Google Sheets nativo**, compartilhado
+  como "Qualquer pessoa com o link → Leitor", e ter as colunas SMART, MATERIAL,
+  QTD ESTOQUE e CONSUMO (mesmos nomes da Central).
